@@ -35,8 +35,9 @@ public class AppFlappyBird {
     private static final int ANCHO = 900;
     private static final int ALTO = 700;
 
-    // Posicion horizontal fija del pajaro en NDC.
-    private static final float BIRD_X = -0.45f;
+    // Posiciones horizontales fijas de los dos jugadores en NDC.
+    private static final float BIRD_X_PLAYER1 = -0.45f;
+    private static final float BIRD_X_PLAYER2 = -0.15f;
     // Tamano del pajaro.
     private static final float BIRD_ANCHO = 0.10f;
     private static final float BIRD_ALTO = 0.10f;
@@ -79,7 +80,8 @@ public class AppFlappyBird {
     private int vboCircle;
 
     // Estado del jugador/juego.
-    private Bird bird;
+    private Bird player1;
+    private Bird player2;
     private float timerSpawn;
 
     // Animacion de ala.
@@ -87,10 +89,12 @@ public class AppFlappyBird {
     private float wingAngle;
     private float wingFlapTimer;
 
+    private boolean prevSpace;
+    private boolean prevJump2;
+    private boolean prevR;
+
     private boolean started;
     private boolean gameOver;
-    private boolean prevSpace;
-    private boolean prevR;
 
     // Lista de obstaculos activos.
     private final List<Tuberia> tuberias = new ArrayList<>();
@@ -106,11 +110,14 @@ public class AppFlappyBird {
     private static class Tuberia {
         float x;
         float gapCentroY;
-        boolean puntuada;
+        boolean puntuadaP1;
+        boolean puntuadaP2;
 
         Tuberia(float x, float gapCentroY) {
             this.x = x;
             this.gapCentroY = gapCentroY;
+            this.puntuadaP1 = false;
+            this.puntuadaP2 = false;
         }
     }
 
@@ -364,10 +371,15 @@ public class AppFlappyBird {
      * Se usa al iniciar app y al reiniciar tras game over.
      */
     private void resetGame() {
-        if (bird == null) {
-            bird = new Bird(BIRD_X, 0.0f, 0.98f, 0.85f, 0.20f);
+        if (player1 == null) {
+            player1 = new Bird(BIRD_X_PLAYER1, 0.0f, 0.98f, 0.85f, 0.20f);
         } else {
-            bird.reset(0.0f);
+            player1.reset(0.0f);
+        }
+        if (player2 == null) {
+            player2 = new Bird(BIRD_X_PLAYER2, 0.0f, 0.35f, 0.70f, 0.98f);
+        } else {
+            player2.reset(0.0f);
         }
         timerSpawn = 0.0f;
         wingAnimTime = 0.0f;
@@ -375,6 +387,8 @@ public class AppFlappyBird {
         wingFlapTimer = 0.0f;
         started = false;
         gameOver = false;
+        prevSpace = false;
+        prevJump2 = false;
         tuberias.clear();
         actualizarTitulo();
     }
@@ -399,11 +413,27 @@ public class AppFlappyBird {
                 resetGame();
             }
             started = true;
-            bird.jump();
-            // Iniciar animacion de aleteo al saltar.
+            if (player1.isAlive()) {
+                player1.jump();
+            }
             wingFlapTimer = WING_FLAP_DURATION;
         }
         prevSpace = spaceAhora;
+
+        boolean wAhora = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_W) == GLFW.GLFW_PRESS;
+        boolean upAhora = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_UP) == GLFW.GLFW_PRESS;
+        boolean jump2Ahora = wAhora || upAhora;
+        if (jump2Ahora && !prevJump2) {
+            if (gameOver) {
+                resetGame();
+            }
+            started = true;
+            if (player2.isAlive()) {
+                player2.jump();
+            }
+            wingFlapTimer = WING_FLAP_DURATION;
+        }
+        prevJump2 = jump2Ahora;
 
         boolean rAhora = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_R) == GLFW.GLFW_PRESS;
         if (rAhora && !prevR && gameOver) {
@@ -424,13 +454,16 @@ public class AppFlappyBird {
             return;
         }
 
-        // Actualizar fisica del pajaro.
-        bird.update(dt);
+        // Actualizar fisica de cada jugador activo.
+        player1.update(dt);
+        player2.update(dt);
 
-        // Colision contra techo/suelo NDC.
-        float birdTop = bird.getY() + (BIRD_ALTO * 0.5f);
-        float birdBottom = bird.getY() - (BIRD_ALTO * 0.5f);
-        if (birdTop >= 1.0f || birdBottom <= -1.0f) {
+        // Colision contra techo/suelo NDC para cada jugador.
+        checkBoundsCollision(player1);
+        checkBoundsCollision(player2);
+
+        // La partida termina solo cuando los dos jugadores estan muertos.
+        if (!player1.isAlive() && !player2.isAlive()) {
             gameOver = true;
             actualizarTitulo();
             return;
@@ -456,16 +489,31 @@ public class AppFlappyBird {
             // Avance horizontal de obstaculos (derecha -> izquierda).
             t.x -= VELOCIDAD_TUBERIAS * dt;
 
-            // Puntuar cuando la tuberia ya quedo atras del pajaro.
-            if (t.x + (TUBERIA_ANCHO * 0.5f) < bird.getX() && !t.puntuada) {
-                t.puntuada = true;
-                bird.addScore();
+                boolean scored = false;
+            if (player1.isAlive() && t.x + (TUBERIA_ANCHO * 0.5f) < player1.getX() && !t.puntuadaP1) {
+                player1.addScore();
+                t.puntuadaP1 = true;
+                scored = true;
+            }
+            if (player2.isAlive() && t.x + (TUBERIA_ANCHO * 0.5f) < player2.getX() && !t.puntuadaP2) {
+                player2.addScore();
+                t.puntuadaP2 = true;
+                scored = true;
+            }
+            if (scored) {
                 actualizarTitulo();
             }
 
-            if (colisionaConTuberia(t)) {
+            boolean collided1 = player1.isAlive() && colisionaConTuberia(t, player1);
+            boolean collided2 = player2.isAlive() && colisionaConTuberia(t, player2);
+            if (collided1) {
+                player1.kill();
+            }
+            if (collided2) {
+                player2.kill();
+            }
+            if ((!player1.isAlive() && !player2.isAlive())) {
                 gameOver = true;
-                bird.kill();
                 actualizarTitulo();
                 return;
             }
@@ -474,6 +522,17 @@ public class AppFlappyBird {
             if (t.x + (TUBERIA_ANCHO * 0.5f) < -1.3f) {
                 it.remove();
             }
+        }
+    }
+
+    private void checkBoundsCollision(Bird player) {
+        if (!player.isAlive()) {
+            return;
+        }
+        float birdTop = player.getY() + (BIRD_ALTO * 0.5f);
+        float birdBottom = player.getY() - (BIRD_ALTO * 0.5f);
+        if (birdTop >= 1.0f || birdBottom <= -1.0f) {
+            player.kill();
         }
     }
 
@@ -488,9 +547,9 @@ public class AppFlappyBird {
      * 1) Si no hay overlap horizontal, no colisiona.
      * 2) Si hay overlap horizontal, colisiona si el pajaro esta fuera del gap.
      */
-    private boolean colisionaConTuberia(Tuberia t) {
-        float birdLeft = BIRD_X - (BIRD_ANCHO * 0.5f);
-        float birdRight = BIRD_X + (BIRD_ANCHO * 0.5f);
+    private boolean colisionaConTuberia(Tuberia t, Bird bird) {
+        float birdLeft = bird.getX() - (BIRD_ANCHO * 0.5f);
+        float birdRight = bird.getX() + (BIRD_ANCHO * 0.5f);
         float birdBottom = bird.getY() - (BIRD_ALTO * 0.5f);
         float birdTop = bird.getY() + (BIRD_ALTO * 0.5f);
 
@@ -544,7 +603,8 @@ public class AppFlappyBird {
 
         //. Dibujar pajaro.
         //. La posición X queda fija y la posición Y cambia según la gravedad y el salto.
-        drawBird(bird);
+        drawBird(player1);
+        drawBird(player2);
 
         // Overlay simple de game over (sin texto en framebuffer).
         if (gameOver) {
@@ -597,7 +657,7 @@ public class AppFlappyBird {
     //. No usa imágenes ni texturas: combina círculos y triángulos con distintos tamaños,
     //. posiciones y colores para formar el cuerpo, pico, ala, cola, ojo y pupila.
     private void drawBird(Bird bird) {
-        float birdRotation = calculateBirdRotation();
+        float birdRotation = calculateBirdRotation(bird);
         float x = bird.getX();
         float y = bird.getY();
         float bodyScale = 1.5f;
@@ -653,7 +713,7 @@ public class AppFlappyBird {
         };
     }
 
-    private float calculateBirdRotation() {
+    private float calculateBirdRotation(Bird bird) {
         float maxUp = 25.0f;
         float maxDown = -45.0f;
         float rotationDeg;
@@ -667,10 +727,11 @@ public class AppFlappyBird {
     }
 
     private void updateWingAngle(float dt) {
+        Bird referenceBird = player1.isAlive() ? player1 : player2;
         float targetAngle;
         if (wingFlapTimer > 0.0f) {
             targetAngle = WING_JUMP_ANGLE;
-        } else if (bird.getVelocityY() >= 0.0f) {
+        } else if (referenceBird.getVelocityY() >= 0.0f) {
             targetAngle = WING_RISE_ANGLE;
         } else {
             targetAngle = WING_FALL_ANGLE;
@@ -684,11 +745,11 @@ public class AppFlappyBird {
 
     // Actualiza feedback visual en barra de titulo.
     private void actualizarTitulo() {
-        String tituloBase = "Flappy Bird OpenGL | Puntos: " + bird.getScore();
+        String tituloBase = String.format("Flappy Bird OpenGL | P1: %d  P2: %d", player1.getScore(), player2.getScore());
         if (!started) {
-            GLFW.glfwSetWindowTitle(window, tituloBase + " | SPACE para empezar");
+            GLFW.glfwSetWindowTitle(window, tituloBase + " | SPACE o W/ARRIBA para empezar");
         } else if (gameOver) {
-            GLFW.glfwSetWindowTitle(window, tituloBase + " | GAME OVER - SPACE o R para reiniciar");
+            GLFW.glfwSetWindowTitle(window, tituloBase + " | GAME OVER - SPACE o W/ARRIBA para reiniciar");
         } else {
             GLFW.glfwSetWindowTitle(window, tituloBase);
         }
