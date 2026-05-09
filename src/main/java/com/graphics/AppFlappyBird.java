@@ -45,6 +45,14 @@ public class AppFlappyBird {
     private static final float IMPULSO_SALTO = 0.85f;
     private static final float VELOCIDAD_MAX_CAIDA = -1.8f;
 
+    // Animacion del ala.
+    private static final float WING_FLAP_DURATION = 0.18f;
+    private static final float WING_JUMP_ANGLE = 0.35f; // radianes
+    private static final float WING_RISE_ANGLE = 0.12f; // radianes
+    private static final float WING_FALL_ANGLE = -0.18f; // radianes
+    private static final float WING_OSCILLATION_SPEED = 18.0f;
+    private static final float WING_OSCILLATION_AMPLITUDE = 0.04f;
+
     // Parametros de tuberias.
     private static final float TUBERIA_ANCHO = 0.18f;
     private static final float GAP_ALTO = 0.48f;
@@ -58,9 +66,10 @@ public class AppFlappyBird {
     private int programa;
     private int vao;
     private int vbo;
-    // Uniforms de transformacion y color.
+    // Uniforms de transformacion, rotacion y color.
     private int uOffsetLocation;
     private int uScaleLocation;
+    private int uRotationLocation;
     private int uColorLocation;
 
     // Recursos adicionales para figuras compuestas.
@@ -70,10 +79,13 @@ public class AppFlappyBird {
     private int vboCircle;
 
     // Estado del jugador/juego.
-    private float birdY;
-    private float birdVelY;
+    private Bird bird;
     private float timerSpawn;
-    private int puntaje;
+
+    // Animacion de ala.
+    private float wingAnimTime;
+    private float wingAngle;
+    private float wingFlapTimer;
 
     private boolean started;
     private boolean gameOver;
@@ -160,8 +172,16 @@ public class AppFlappyBird {
             layout (location = 0) in vec3 aPos;
             uniform vec2 uOffset;
             uniform vec2 uScale;
+            uniform float uRotation;
             void main() {
-                vec2 finalPos = aPos.xy * uScale + uOffset;
+                float cosR = cos(uRotation);
+                float sinR = sin(uRotation);
+                vec2 scaledPos = aPos.xy * uScale;
+                vec2 rotatedPos = vec2(
+                    scaledPos.x * cosR - scaledPos.y * sinR,
+                    scaledPos.x * sinR + scaledPos.y * cosR
+                );
+                vec2 finalPos = rotatedPos + uOffset;
                 gl_Position = vec4(finalPos, aPos.z, 1.0);
             }
             """;
@@ -201,8 +221,9 @@ public class AppFlappyBird {
         // Resolver uniforms.
         uOffsetLocation = GL20.glGetUniformLocation(programa, "uOffset");
         uScaleLocation = GL20.glGetUniformLocation(programa, "uScale");
+        uRotationLocation = GL20.glGetUniformLocation(programa, "uRotation");
         uColorLocation = GL20.glGetUniformLocation(programa, "uColor");
-        if (uOffsetLocation == -1 || uScaleLocation == -1 || uColorLocation == -1) {
+        if (uOffsetLocation == -1 || uScaleLocation == -1 || uRotationLocation == -1 || uColorLocation == -1) {
             throw new RuntimeException("No se pudieron obtener uniforms del shader");
         }
 
@@ -343,10 +364,15 @@ public class AppFlappyBird {
      * Se usa al iniciar app y al reiniciar tras game over.
      */
     private void resetGame() {
-        birdY = 0.0f;
-        birdVelY = 0.0f;
+        if (bird == null) {
+            bird = new Bird(BIRD_X, 0.0f, 0.98f, 0.85f, 0.20f);
+        } else {
+            bird.reset(0.0f);
+        }
         timerSpawn = 0.0f;
-        puntaje = 0;
+        wingAnimTime = 0.0f;
+        wingAngle = 0.0f;
+        wingFlapTimer = 0.0f;
         started = false;
         gameOver = false;
         tuberias.clear();
@@ -371,12 +397,11 @@ public class AppFlappyBird {
         if (spaceAhora && !prevSpace) {
             if (gameOver) {
                 resetGame();
-                started = true;
-                birdVelY = IMPULSO_SALTO;
-            } else {
-                started = true;
-                birdVelY = IMPULSO_SALTO;
             }
+            started = true;
+            bird.jump();
+            // Iniciar animacion de aleteo al saltar.
+            wingFlapTimer = WING_FLAP_DURATION;
         }
         prevSpace = spaceAhora;
 
@@ -399,17 +424,12 @@ public class AppFlappyBird {
             return;
         }
 
-        // Integracion de fisica simple.
-        birdVelY += GRAVEDAD * dt;
-        // Limitar velocidad de caida para sensacion jugable estable.
-        if (birdVelY < VELOCIDAD_MAX_CAIDA) {
-            birdVelY = VELOCIDAD_MAX_CAIDA;
-        }
-        birdY += birdVelY * dt;
+        // Actualizar fisica del pajaro.
+        bird.update(dt);
 
         // Colision contra techo/suelo NDC.
-        float birdTop = birdY + (BIRD_ALTO * 0.5f);
-        float birdBottom = birdY - (BIRD_ALTO * 0.5f);
+        float birdTop = bird.getY() + (BIRD_ALTO * 0.5f);
+        float birdBottom = bird.getY() - (BIRD_ALTO * 0.5f);
         if (birdTop >= 1.0f || birdBottom <= -1.0f) {
             gameOver = true;
             actualizarTitulo();
@@ -423,6 +443,13 @@ public class AppFlappyBird {
             spawnTuberia();
         }
 
+        // Actualizar tiempo de animacion del ala.
+        wingAnimTime += dt;
+        if (wingFlapTimer > 0.0f) {
+            wingFlapTimer -= dt;
+        }
+        updateWingAngle(dt);
+
         Iterator<Tuberia> it = tuberias.iterator();
         while (it.hasNext()) {
             Tuberia t = it.next();
@@ -430,14 +457,15 @@ public class AppFlappyBird {
             t.x -= VELOCIDAD_TUBERIAS * dt;
 
             // Puntuar cuando la tuberia ya quedo atras del pajaro.
-            if (t.x + (TUBERIA_ANCHO * 0.5f) < BIRD_X && !t.puntuada) {
+            if (t.x + (TUBERIA_ANCHO * 0.5f) < bird.getX() && !t.puntuada) {
                 t.puntuada = true;
-                puntaje++;
+                bird.addScore();
                 actualizarTitulo();
             }
 
             if (colisionaConTuberia(t)) {
                 gameOver = true;
+                bird.kill();
                 actualizarTitulo();
                 return;
             }
@@ -463,8 +491,8 @@ public class AppFlappyBird {
     private boolean colisionaConTuberia(Tuberia t) {
         float birdLeft = BIRD_X - (BIRD_ANCHO * 0.5f);
         float birdRight = BIRD_X + (BIRD_ANCHO * 0.5f);
-        float birdBottom = birdY - (BIRD_ALTO * 0.5f);
-        float birdTop = birdY + (BIRD_ALTO * 0.5f);
+        float birdBottom = bird.getY() - (BIRD_ALTO * 0.5f);
+        float birdTop = bird.getY() + (BIRD_ALTO * 0.5f);
 
         float pipeLeft = t.x - (TUBERIA_ANCHO * 0.5f);
         float pipeRight = t.x + (TUBERIA_ANCHO * 0.5f);
@@ -503,33 +531,37 @@ public class AppFlappyBird {
             float altoSuperior = 1.0f - gapTop;
             if (altoSuperior > 0.0f) {
                 float yCentroSup = gapTop + (altoSuperior * 0.5f);
-                drawRect(t.x, yCentroSup, TUBERIA_ANCHO, altoSuperior, 0.18f, 0.70f, 0.25f);
+                drawRect(t.x, yCentroSup, TUBERIA_ANCHO, altoSuperior, 0.0f, 0.18f, 0.70f, 0.25f);
             }
 
             // Tramo inferior de tuberia.
             float altoInferior = gapBottom + 1.0f;
             if (altoInferior > 0.0f) {
                 float yCentroInf = -1.0f + (altoInferior * 0.5f);
-                drawRect(t.x, yCentroInf, TUBERIA_ANCHO, altoInferior, 0.18f, 0.70f, 0.25f);
+                drawRect(t.x, yCentroInf, TUBERIA_ANCHO, altoInferior, 0.0f, 0.18f, 0.70f, 0.25f);
             }
         }
 
         //. Dibujar pajaro.
         //. La posición X queda fija y la posición Y cambia según la gravedad y el salto.
-        drawBird(BIRD_X, birdY);
+        drawBird(bird);
 
         // Overlay simple de game over (sin texto en framebuffer).
         if (gameOver) {
-            drawRect(0.0f, 0.0f, 2.0f, 0.22f, 0.15f, 0.18f, 0.22f);
+            drawRect(0.0f, 0.0f, 2.0f, 0.22f, 0.0f, 0.15f, 0.18f, 0.22f);
         }
     }
 
     // Helper de dibujo parametrico de rectangulos.
-    private void drawRect(float x, float y, float ancho, float alto, float r, float g, float b) {
+    private void drawRect(float x, float y, float ancho, float alto, float rotation, float r, float g, float b) {
+        // Asegurar que usamos el VAO base del quad.
+        GL30.glBindVertexArray(vao);
         // Traslacion del quad.
         GL20.glUniform2f(uOffsetLocation, x, y);
         // Escala del quad.
         GL20.glUniform2f(uScaleLocation, ancho, alto);
+        // Rotacion del quad.
+        GL20.glUniform1f(uRotationLocation, rotation);
         // Color.
         GL20.glUniform3f(uColorLocation, r, g, b);
         // Dibujar 2 triangulos.
@@ -537,23 +569,25 @@ public class AppFlappyBird {
     }
 
     // Dibuja un triangulo usando el VAO de triangulo.
-    //. Dibuja un triángulo con posición, tamaño y color.
+    //. Dibuja un triángulo con posición, tamaño, rotación y color.
     //. Se usa para construir partes angulares del pájaro: pico, ala y cola.
-    private void drawTriangle(float x, float y, float scale, float r, float g, float b) {
+    private void drawTriangle(float x, float y, float scale, float rotation, float r, float g, float b) {
         GL30.glBindVertexArray(vaoTriangle);
         GL20.glUniform2f(uOffsetLocation, x, y);
         GL20.glUniform2f(uScaleLocation, scale, scale);
+        GL20.glUniform1f(uRotationLocation, rotation);
         GL20.glUniform3f(uColorLocation, r, g, b);
         GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, 3);
     }
 
     // Dibuja una aproximacion de circulo usando triangle fan.
-    //. Dibuja un círculo aproximado con posición, radio y color.
+    //. Dibuja un círculo aproximado con posición, radio, rotación y color.
     //. Se usa para representar partes redondas del pájaro: cuerpo, ojo y pupila.
-    private void drawCircleApprox(float x, float y, float radius, float r, float g, float b) {
+    private void drawCircleApprox(float x, float y, float radius, float rotation, float r, float g, float b) {
         GL30.glBindVertexArray(vaoCircle);
         GL20.glUniform2f(uOffsetLocation, x, y);
         GL20.glUniform2f(uScaleLocation, radius * 2, radius * 2); // escala para radio
+        GL20.glUniform1f(uRotationLocation, rotation);
         GL20.glUniform3f(uColorLocation, r, g, b);
         GL11.glDrawArrays(GL11.GL_TRIANGLE_FAN, 0, 14); // centro + 12 puntos + cierre
     }
@@ -562,45 +596,95 @@ public class AppFlappyBird {
     //. Construye visualmente el pájaro usando figuras geométricas.
     //. No usa imágenes ni texturas: combina círculos y triángulos con distintos tamaños,
     //. posiciones y colores para formar el cuerpo, pico, ala, cola, ojo y pupila.
-    private void drawBird(float x, float y) {
-        // Factor de escala para hacer el pajaro 1.5x mas grande visualmente
-        float scaleFactor = 1.5f;
+    private void drawBird(Bird bird) {
+        float birdRotation = calculateBirdRotation();
+        float x = bird.getX();
+        float y = bird.getY();
+        float bodyScale = 1.5f;
 
         // Cuerpo principal: circulo amarillo-anaranjado, representa ~65% del tamano total
-        float bodyRadius = BIRD_ANCHO * 0.35f * scaleFactor; // ~0.0525
-        drawCircleApprox(x, y, bodyRadius, 0.98f, 0.85f, 0.20f);
+        float bodyRadius = BIRD_ANCHO * 0.35f * bodyScale;
+        drawCircleApprox(x, y, bodyRadius, birdRotation, bird.getColorR(), bird.getColorG(), bird.getColorB());
 
-        // Pico: triangulo naranja pequeno, orientado a la derecha
-        float beakOffsetX = bodyRadius * 0.8f; // ~0.042
-        float beakScale = BIRD_ANCHO * 0.15f * scaleFactor; // ~0.0225
-        drawTriangle(x + beakOffsetX, y, beakScale, 0.9f, 0.6f, 0.1f);
+        // Pico: triangulo naranja apuntando a la derecha
+        float beakOffsetX = bodyRadius * 0.85f;
+        float beakScale = BIRD_ANCHO * 0.15f * bodyScale;
+        float[] beakOffset = rotateOffset(beakOffsetX, 0.0f, birdRotation);
+        drawTriangle(x + beakOffset[0], y + beakOffset[1], beakScale, birdRotation - toRadians(90.0f), 0.9f, 0.6f, 0.1f);
 
-        // Ala: triangulo azul mas oscuro, centrado en el costado izquierdo del cuerpo
-        float wingOffsetX = -bodyRadius * 0.5f; // ~ -0.026
-        float wingScale = BIRD_ANCHO * 0.25f * scaleFactor; // ~0.0375
-        drawTriangle(x + wingOffsetX, y, wingScale, 0.8f, 0.7f, 0.15f);
+        // Ala: triangulo mas oscuro en el costado izquierdo del cuerpo
+        float wingOffsetX = -bodyRadius * 0.45f;
+        float wingScale = BIRD_ANCHO * 0.25f * bodyScale;
+        float[] wingOffset = rotateOffset(wingOffsetX, 0.0f, birdRotation);
+        float wingOscillation = (float) Math.sin(wingAnimTime * WING_OSCILLATION_SPEED) * WING_OSCILLATION_AMPLITUDE;
+        drawTriangle(x + wingOffset[0], y + wingOffset[1], wingScale,
+            birdRotation + toRadians(90.0f) + wingAngle + wingOscillation,
+            0.8f, 0.7f, 0.15f);
 
-        // Cola: dos triangulos pequenos atras, mismo color que el cuerpo
-        float tailOffsetX = -bodyRadius * 1.2f; // ~ -0.063
-        float tailScale = BIRD_ANCHO * 0.12f * scaleFactor; // ~0.018
-        drawTriangle(x + tailOffsetX, y + bodyRadius * 0.3f, tailScale, 0.98f, 0.85f, 0.20f); // Cola superior
-        drawTriangle(x + tailOffsetX, y - bodyRadius * 0.3f, tailScale, 0.98f, 0.85f, 0.20f); // Cola inferior
+        // Cola: dos triangulos pequenos atras del cuerpo
+        float tailOffsetX = -bodyRadius * 1.05f;
+        float tailY = bodyRadius * 0.3f;
+        float tailScale = BIRD_ANCHO * 0.12f * bodyScale;
+        float[] tailOffsetUp = rotateOffset(tailOffsetX, tailY, birdRotation);
+        float[] tailOffsetDown = rotateOffset(tailOffsetX, -tailY, birdRotation);
+        drawTriangle(x + tailOffsetUp[0], y + tailOffsetUp[1], tailScale, birdRotation + toRadians(90.0f), 0.98f, 0.85f, 0.20f);
+        drawTriangle(x + tailOffsetDown[0], y + tailOffsetDown[1], tailScale, birdRotation + toRadians(90.0f), 0.98f, 0.85f, 0.20f);
 
         // Ojo: circulo blanco en la parte frontal superior
-        float eyeOffsetX = bodyRadius * 0.4f; // ~0.021
-        float eyeOffsetY = bodyRadius * 0.5f; // ~0.026
-        float eyeRadius = bodyRadius * 0.2f; // ~0.0105
-        drawCircleApprox(x + eyeOffsetX, y + eyeOffsetY, eyeRadius, 1.0f, 1.0f, 1.0f);
+        float eyeOffsetX = bodyRadius * 0.4f;
+        float eyeOffsetY = bodyRadius * 0.45f;
+        float eyeRadius = bodyRadius * 0.18f;
+        float[] eyeOffset = rotateOffset(eyeOffsetX, eyeOffsetY, birdRotation);
+        drawCircleApprox(x + eyeOffset[0], y + eyeOffset[1], eyeRadius, birdRotation, 1.0f, 1.0f, 1.0f);
 
         // Pupila: circulo negro pequeno dentro del ojo
-        float pupilOffsetX = eyeOffsetX + eyeRadius * 0.3f; // ~0.0245
-        float pupilRadius = eyeRadius * 0.4f; // ~0.0042
-        drawCircleApprox(x + pupilOffsetX, y + eyeOffsetY, pupilRadius, 0.0f, 0.0f, 0.0f);
+        float pupilOffsetX = eyeOffsetX + eyeRadius * 0.3f;
+        float pupilRadius = eyeRadius * 0.4f;
+        float[] pupilOffset = rotateOffset(pupilOffsetX, eyeOffsetY, birdRotation);
+        drawCircleApprox(x + pupilOffset[0], y + pupilOffset[1], pupilRadius, birdRotation, 0.0f, 0.0f, 0.0f);
+    }
+
+    private float[] rotateOffset(float offsetX, float offsetY, float rotation) {
+        float cos = (float) Math.cos(rotation);
+        float sin = (float) Math.sin(rotation);
+        return new float[] {
+            offsetX * cos - offsetY * sin,
+            offsetX * sin + offsetY * cos
+        };
+    }
+
+    private float calculateBirdRotation() {
+        float maxUp = 25.0f;
+        float maxDown = -45.0f;
+        float rotationDeg;
+        if (bird.getVelocityY() >= 0.0f) {
+            rotationDeg = (bird.getVelocityY() / IMPULSO_SALTO) * maxUp;
+        } else {
+            rotationDeg = (bird.getVelocityY() / VELOCIDAD_MAX_CAIDA) * maxDown;
+        }
+        rotationDeg = Math.max(Math.min(rotationDeg, maxUp), maxDown);
+        return toRadians(rotationDeg);
+    }
+
+    private void updateWingAngle(float dt) {
+        float targetAngle;
+        if (wingFlapTimer > 0.0f) {
+            targetAngle = WING_JUMP_ANGLE;
+        } else if (bird.getVelocityY() >= 0.0f) {
+            targetAngle = WING_RISE_ANGLE;
+        } else {
+            targetAngle = WING_FALL_ANGLE;
+        }
+        wingAngle += (targetAngle - wingAngle) * Math.min(1.0f, dt * 10.0f);
+    }
+
+    private float toRadians(float degrees) {
+        return degrees * ((float) Math.PI / 180.0f);
     }
 
     // Actualiza feedback visual en barra de titulo.
     private void actualizarTitulo() {
-        String tituloBase = "Flappy Bird OpenGL | Puntos: " + puntaje;
+        String tituloBase = "Flappy Bird OpenGL | Puntos: " + bird.getScore();
         if (!started) {
             GLFW.glfwSetWindowTitle(window, tituloBase + " | SPACE para empezar");
         } else if (gameOver) {
