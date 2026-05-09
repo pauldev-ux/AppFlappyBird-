@@ -549,14 +549,39 @@ public class AppFlappyBird {
 
     // Dibuja un pajaro compuesto usando figuras geometricas.
     private void drawBird(float x, float y) {
-        // Cuerpo: rectangulo amarillo
-        drawRect(x, y, BIRD_ANCHO * 0.8f, BIRD_ALTO * 0.8f, 0.98f, 0.85f, 0.20f);
-        // Ala: triangulo azul
-        drawTriangle(x + 0.02f, y + 0.02f, 0.03f, 0.2f, 0.5f, 0.9f);
-        // Pico: triangulo naranja
-        drawTriangle(x + 0.04f, y, 0.02f, 0.9f, 0.6f, 0.1f);
-        // Ojo: circulo negro
-        drawCircleApprox(x + 0.02f, y + 0.02f, 0.01f, 0.0f, 0.0f, 0.0f);
+        // Factor de escala para hacer el pajaro 1.5x mas grande visualmente
+        float scaleFactor = 1.5f;
+
+        // Cuerpo principal: circulo amarillo-anaranjado, representa ~65% del tamano total
+        float bodyRadius = BIRD_ANCHO * 0.35f * scaleFactor; // ~0.0525
+        drawCircleApprox(x, y, bodyRadius, 0.98f, 0.85f, 0.20f);
+
+        // Pico: triangulo naranja pequeno, orientado a la derecha
+        float beakOffsetX = bodyRadius * 0.8f; // ~0.042
+        float beakScale = BIRD_ANCHO * 0.15f * scaleFactor; // ~0.0225
+        drawTriangle(x + beakOffsetX, y, beakScale, 0.9f, 0.6f, 0.1f);
+
+        // Ala: triangulo azul mas oscuro, centrado en el costado izquierdo del cuerpo
+        float wingOffsetX = -bodyRadius * 0.5f; // ~ -0.026
+        float wingScale = BIRD_ANCHO * 0.25f * scaleFactor; // ~0.0375
+        drawTriangle(x + wingOffsetX, y, wingScale, 0.8f, 0.7f, 0.15f);
+
+        // Cola: dos triangulos pequenos atras, mismo color que el cuerpo
+        float tailOffsetX = -bodyRadius * 1.2f; // ~ -0.063
+        float tailScale = BIRD_ANCHO * 0.12f * scaleFactor; // ~0.018
+        drawTriangle(x + tailOffsetX, y + bodyRadius * 0.3f, tailScale, 0.98f, 0.85f, 0.20f); // Cola superior
+        drawTriangle(x + tailOffsetX, y - bodyRadius * 0.3f, tailScale, 0.98f, 0.85f, 0.20f); // Cola inferior
+
+        // Ojo: circulo blanco en la parte frontal superior
+        float eyeOffsetX = bodyRadius * 0.4f; // ~0.021
+        float eyeOffsetY = bodyRadius * 0.5f; // ~0.026
+        float eyeRadius = bodyRadius * 0.2f; // ~0.0105
+        drawCircleApprox(x + eyeOffsetX, y + eyeOffsetY, eyeRadius, 1.0f, 1.0f, 1.0f);
+
+        // Pupila: circulo negro pequeno dentro del ojo
+        float pupilOffsetX = eyeOffsetX + eyeRadius * 0.3f; // ~0.0245
+        float pupilRadius = eyeRadius * 0.4f; // ~0.0042
+        drawCircleApprox(x + pupilOffsetX, y + eyeOffsetY, pupilRadius, 0.0f, 0.0f, 0.0f);
     }
 
     // Actualiza feedback visual en barra de titulo.
