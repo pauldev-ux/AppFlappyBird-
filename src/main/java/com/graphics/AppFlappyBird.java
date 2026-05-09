@@ -141,6 +141,8 @@ public class AppFlappyBird {
         GL.createCapabilities();
 
         // Crear pipeline y quad unitario reutilizable.
+        //. Se crean los recursos gráficos base: shaders, rectángulo, triángulo y círculo.
+        //. El triángulo y el círculo se usarán después para formar visualmente el pájaro.
         crearShaders();
         crearQuadBase();
         crearTriangle();
@@ -258,6 +260,8 @@ public class AppFlappyBird {
      * Crea un triangulo equilatero centrado en origen.
      * Vertices en sentido antihorario.
      */
+    //. Crea la figura base de un triángulo.
+    //. Esta figura se reutiliza para dibujar partes del pájaro como el pico, el ala y la cola.
     private void crearTriangle() {
         float[] vertices = {
             0.0f,  0.5f, 0.0f,   // cima
@@ -291,6 +295,8 @@ public class AppFlappyBird {
      * Crea una aproximacion de circulo usando triangle fan (12 triangulos).
      * Centro + 12 puntos en circunferencia.
      */
+    //. Crea una aproximación de círculo usando varios vértices.
+    //. Esta figura se reutiliza para dibujar el cuerpo, el ojo y la pupila del pájaro.
     private void crearCircleApprox() {
         int numSegments = 12;
         float[] vertices = new float[(numSegments + 2) * 3]; // centro + numSegments + cierre
@@ -508,7 +514,8 @@ public class AppFlappyBird {
             }
         }
 
-        // Dibujar pajaro.
+        //. Dibujar pajaro.
+        //. La posición X queda fija y la posición Y cambia según la gravedad y el salto.
         drawBird(BIRD_X, birdY);
 
         // Overlay simple de game over (sin texto en framebuffer).
@@ -530,6 +537,8 @@ public class AppFlappyBird {
     }
 
     // Dibuja un triangulo usando el VAO de triangulo.
+    //. Dibuja un triángulo con posición, tamaño y color.
+    //. Se usa para construir partes angulares del pájaro: pico, ala y cola.
     private void drawTriangle(float x, float y, float scale, float r, float g, float b) {
         GL30.glBindVertexArray(vaoTriangle);
         GL20.glUniform2f(uOffsetLocation, x, y);
@@ -539,6 +548,8 @@ public class AppFlappyBird {
     }
 
     // Dibuja una aproximacion de circulo usando triangle fan.
+    //. Dibuja un círculo aproximado con posición, radio y color.
+    //. Se usa para representar partes redondas del pájaro: cuerpo, ojo y pupila.
     private void drawCircleApprox(float x, float y, float radius, float r, float g, float b) {
         GL30.glBindVertexArray(vaoCircle);
         GL20.glUniform2f(uOffsetLocation, x, y);
@@ -548,6 +559,9 @@ public class AppFlappyBird {
     }
 
     // Dibuja un pajaro compuesto usando figuras geometricas.
+    //. Construye visualmente el pájaro usando figuras geométricas.
+    //. No usa imágenes ni texturas: combina círculos y triángulos con distintos tamaños,
+    //. posiciones y colores para formar el cuerpo, pico, ala, cola, ojo y pupila.
     private void drawBird(float x, float y) {
         // Factor de escala para hacer el pajaro 1.5x mas grande visualmente
         float scaleFactor = 1.5f;
