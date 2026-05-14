@@ -101,6 +101,26 @@ public class AppFlappyBird {
     // RNG para variar la posicion del gap.
     private final Random random = new Random();
 
+    // Sistema de dificultad progresiva.
+    private static final int NIVEL_MAXIMO = 5;
+    private static final int PUNTOS_POR_NIVEL = 3;
+    private float velocidadBaseTuberias;
+    private float velocidadActualTuberias;
+    private int nivelDificultad;
+
+    // Elementos decorativos para mejorar la interfaz visual.
+    // Nubes: posiciones x de varias nubes que se mueven lentamente.
+    private final List<Float> nubesX = new ArrayList<>();
+    // Montañas: posiciones fijas para triángulos grandes en el fondo.
+    private static final float[] MONTANAS_X = { -0.8f, -0.2f, 0.4f, 1.0f };
+    private static final float[] MONTANAS_ALTURAS = { 0.3f, 0.25f, 0.35f, 0.2f };
+    // Suelo: posiciones para césped decorativo.
+    private final List<Float> cespedX = new ArrayList<>();
+    // Offsets para efecto parallax.
+    private float offsetNubes;
+    private float offsetMontanas;
+    private float offsetSuelo;
+
     /**
      * Modelo de una tuberia:
      * x: posicion horizontal comun para parte superior/inferior,
@@ -390,6 +410,22 @@ public class AppFlappyBird {
         prevSpace = false;
         prevJump2 = false;
         tuberias.clear();
+        // Reiniciar dificultad.
+        velocidadBaseTuberias = VELOCIDAD_TUBERIAS;
+        velocidadActualTuberias = velocidadBaseTuberias;
+        nivelDificultad = 1;
+        // Reiniciar elementos decorativos.
+        nubesX.clear();
+        nubesX.add(1.2f);
+        nubesX.add(1.8f);
+        nubesX.add(2.4f);
+        cespedX.clear();
+        for (int i = 0; i < 20; i++) {
+            cespedX.add(-1.0f + i * 0.1f);
+        }
+        offsetNubes = 0.0f;
+        offsetMontanas = 0.0f;
+        offsetSuelo = 0.0f;
         actualizarTitulo();
     }
 
@@ -483,11 +519,17 @@ public class AppFlappyBird {
         }
         updateWingAngle(dt);
 
+        // Actualizar elementos decorativos para efecto parallax.
+        actualizarElementosDecorativos(dt);
+
+        // Actualizar dificultad según puntaje máximo.
+        actualizarDificultad();
+
         Iterator<Tuberia> it = tuberias.iterator();
         while (it.hasNext()) {
             Tuberia t = it.next();
-            // Avance horizontal de obstaculos (derecha -> izquierda).
-            t.x -= VELOCIDAD_TUBERIAS * dt;
+            // Avance horizontal de obstaculos (derecha -> izquierda) con velocidad ajustada por dificultad.
+            t.x -= velocidadActualTuberias * dt;
 
                 boolean scored = false;
             if (player1.isAlive() && t.x + (TUBERIA_ANCHO * 0.5f) < player1.getX() && !t.puntuadaP1) {
@@ -567,13 +609,17 @@ public class AppFlappyBird {
 
     /**
      * Render del frame:
-     * - fondo,
-     * - tuberias,
-     * - pajaro,
+     * - fondo con degradado,
+     * - montañas,
+     * - nubes,
+     * - tuberias decoradas,
+     * - suelo,
+     * - pajaros,
+     * - indicador de dificultad,
      * - franja central en game over.
      */
     private void render() {
-        // Cielo.
+        // Cielo base (será sobreescrito por el degradado).
         GL11.glClearColor(0.52f, 0.80f, 0.92f, 1.0f);
         GL11.glClear(GL11.GL_COLOR_BUFFER_BIT);
 
@@ -581,30 +627,25 @@ public class AppFlappyBird {
         GL20.glUseProgram(programa);
         GL30.glBindVertexArray(vao);
 
+        // Dibujar elementos decorativos en orden de profundidad.
+        dibujarFondo();
+        dibujarMontanas();
+        dibujarNubes();
+
+        // Dibujar tuberías decoradas.
         for (Tuberia t : tuberias) {
-            // Calcular limites verticales del hueco.
-            float gapTop = t.gapCentroY + (GAP_ALTO * 0.5f);
-            float gapBottom = t.gapCentroY - (GAP_ALTO * 0.5f);
-
-            // Tramo superior de tuberia.
-            float altoSuperior = 1.0f - gapTop;
-            if (altoSuperior > 0.0f) {
-                float yCentroSup = gapTop + (altoSuperior * 0.5f);
-                drawRect(t.x, yCentroSup, TUBERIA_ANCHO, altoSuperior, 0.0f, 0.18f, 0.70f, 0.25f);
-            }
-
-            // Tramo inferior de tuberia.
-            float altoInferior = gapBottom + 1.0f;
-            if (altoInferior > 0.0f) {
-                float yCentroInf = -1.0f + (altoInferior * 0.5f);
-                drawRect(t.x, yCentroInf, TUBERIA_ANCHO, altoInferior, 0.0f, 0.18f, 0.70f, 0.25f);
-            }
+            dibujarTuberiaDecorada(t);
         }
+
+        dibujarSuelo();
 
         //. Dibujar pajaro.
         //. La posición X queda fija y la posición Y cambia según la gravedad y el salto.
         drawBird(player1);
         drawBird(player2);
+
+        // Dibujar indicador visual de dificultad (5 cuadros en esquina superior derecha).
+        dibujarIndicadorDificultad();
 
         // Overlay simple de game over (sin texto en framebuffer).
         if (gameOver) {
@@ -752,6 +793,235 @@ public class AppFlappyBird {
             GLFW.glfwSetWindowTitle(window, tituloBase + " | GAME OVER - SPACE o W/ARRIBA para reiniciar");
         } else {
             GLFW.glfwSetWindowTitle(window, tituloBase);
+        }
+    }
+
+    /**
+     * Calcula el nivel de dificultad basado en el puntaje máximo de los dos jugadores.
+     * Fórmula: (scoreMaximo / PUNTOS_POR_NIVEL) + 1, limitado a NIVEL_MAXIMO
+     * Ejemplo:
+     * - 0-2 puntos: nivel 1
+     * - 3-5 puntos: nivel 2
+     * - 6-8 puntos: nivel 3
+     * - 9-11 puntos: nivel 4
+     * - 12+ puntos: nivel 5
+     */
+    private int calcularNivelDificultad() {
+        int scoreMaximo = Math.max(player1.getScore(), player2.getScore());
+        int nivel = (scoreMaximo / PUNTOS_POR_NIVEL) + 1;
+        return Math.min(nivel, NIVEL_MAXIMO);
+    }
+
+    /**
+     * Calcula la velocidad de las tuberías según el nivel de dificultad.
+     * Velocidad base en nivel 1, se multiplica por factor progresivo:
+     * - Nivel 1: velocidad base × 1.00
+     * - Nivel 2: velocidad base × 1.15
+     * - Nivel 3: velocidad base × 1.30
+     * - Nivel 4: velocidad base × 1.45
+     * - Nivel 5: velocidad base × 1.60
+     */
+    private float calcularVelocidadPorNivel(int nivel) {
+        float[] multiplicadores = { 1.0f, 1.15f, 1.30f, 1.45f, 1.60f };
+        if (nivel < 1 || nivel > NIVEL_MAXIMO) {
+            return velocidadBaseTuberias;
+        }
+        return velocidadBaseTuberias * multiplicadores[nivel - 1];
+    }
+
+    /**
+     * Actualiza la dificultad actual según el puntaje máximo.
+     * Se llama cada frame en actualizar() para permitir cambio dinámico de dificultad.
+     */
+    private void actualizarDificultad() {
+        int nivelAnterior = nivelDificultad;
+        nivelDificultad = calcularNivelDificultad();
+        velocidadActualTuberias = calcularVelocidadPorNivel(nivelDificultad);
+    }
+
+    /**
+     * Dibuja el indicador visual de dificultad: 5 cuadros en la esquina superior derecha.
+     * - Cuadros verdes según el nivel actual.
+     * - Cuadros blancos para los niveles no alcanzados.
+     * Se dibuja en la esquina superior derecha de la pantalla sin interferir con otros elementos.
+     */
+    private void dibujarIndicadorDificultad() {
+        // Parámetros del indicador.
+        final float CUADRO_TAMAÑO = 0.05f;
+        final float ESPACIADO = 0.06f;
+        final float MARGEN_DERECHA = 0.05f;
+        final float MARGEN_ARRIBA = 0.05f;
+        
+        // Posición inicial (esquina superior derecha).
+        float posInicialX = 0.9f - MARGEN_DERECHA;
+        float posY = 0.95f - MARGEN_ARRIBA;
+        
+        // Activar pipeline y malla base.
+        GL20.glUseProgram(programa);
+        GL30.glBindVertexArray(vao);
+        
+        // Dibujar 5 cuadros.
+        for (int i = 0; i < NIVEL_MAXIMO; i++) {
+            // Calcular posición del cuadro (de derecha a izquierda).
+            float posX = posInicialX - (i * ESPACIADO);
+            
+            // Color según si el cuadro está activo (verde) o no (blanco).
+            float r, g, b;
+            if (i < nivelDificultad) {
+                // Verde para cuadros activos.
+                r = 0.2f;
+                g = 0.9f;
+                b = 0.3f;
+            } else {
+                // Blanco para cuadros inactivos.
+                r = 1.0f;
+                g = 1.0f;
+                b = 1.0f;
+            }
+            
+            // Dibujar cuadro.
+            drawRect(posX, posY, CUADRO_TAMAÑO, CUADRO_TAMAÑO, 0.0f, r, g, b);
+        }
+    }
+
+    /**
+     * Actualiza elementos decorativos para efecto parallax.
+     * Los elementos se mueven a diferentes velocidades para crear profundidad visual.
+     * No afecta la física ni la colisión del juego.
+     */
+    private void actualizarElementosDecorativos(float dt) {
+        // Nubes se mueven lentamente (parallax).
+        offsetNubes -= 0.1f * dt; // Muy lento.
+        // Montañas se mueven aún más lento.
+        offsetMontanas -= 0.05f * dt; // Más lento que nubes.
+        // Suelo se mueve un poco más rápido para sensación de velocidad.
+        offsetSuelo -= 0.3f * dt; // Más rápido que tuberías.
+
+        // Actualizar posiciones de nubes.
+        for (int i = 0; i < nubesX.size(); i++) {
+            nubesX.set(i, nubesX.get(i) - 0.1f * dt);
+            if (nubesX.get(i) < -1.5f) {
+                nubesX.set(i, 1.5f); // Reiniciar nube.
+            }
+        }
+
+        // Actualizar posiciones de césped.
+        for (int i = 0; i < cespedX.size(); i++) {
+            cespedX.set(i, cespedX.get(i) - 0.3f * dt);
+            if (cespedX.get(i) < -1.2f) {
+                cespedX.set(i, 1.2f); // Reiniciar césped.
+            }
+        }
+    }
+
+    /**
+     * Dibuja el fondo con degradado visual usando franjas horizontales.
+     * Simula un cielo con colores que van de azul claro arriba a celeste abajo.
+     */
+    private void dibujarFondo() {
+        // Franjas horizontales para degradado.
+        float[] franjasY = { 0.8f, 0.6f, 0.4f, 0.2f, 0.0f, -0.2f, -0.4f, -0.6f };
+        float[] colores = {
+            0.4f, 0.7f, 0.95f, // Azul claro arriba
+            0.5f, 0.75f, 0.95f,
+            0.6f, 0.8f, 0.95f,
+            0.65f, 0.85f, 0.95f,
+            0.7f, 0.9f, 0.95f,
+            0.75f, 0.92f, 0.95f,
+            0.8f, 0.94f, 0.95f,
+            0.85f, 0.96f, 0.95f  // Más claro abajo
+        };
+
+        for (int i = 0; i < franjasY.length; i++) {
+            float y = franjasY[i];
+            float r = colores[i * 3];
+            float g = colores[i * 3 + 1];
+            float b = colores[i * 3 + 2];
+            drawRect(0.0f, y, 2.0f, 0.4f, 0.0f, r, g, b);
+        }
+    }
+
+    /**
+     * Dibuja montañas o colinas en el fondo usando triángulos grandes.
+     * Están detrás de todo y se mueven lentamente para efecto parallax.
+     */
+    private void dibujarMontanas() {
+        GL30.glBindVertexArray(vaoTriangle);
+        for (int i = 0; i < MONTANAS_X.length; i++) {
+            float x = MONTANAS_X[i] + offsetMontanas;
+            float altura = MONTANAS_ALTURAS[i];
+            // Triángulo grande para montaña.
+            drawTriangle(x, -0.5f + altura * 0.5f, altura, 0.0f, 0.3f, 0.6f, 0.3f); // Verde oscuro.
+        }
+        GL30.glBindVertexArray(vao); // Volver al quad.
+    }
+
+    /**
+     * Dibuja nubes decorativas usando círculos o rectángulos.
+     * Se mueven lentamente para efecto parallax.
+     */
+    private void dibujarNubes() {
+        for (float nubeX : nubesX) {
+            float x = nubeX + offsetNubes;
+            // Nube compuesta por varios círculos.
+            drawCircleApprox(x - 0.05f, 0.6f, 0.08f, 0.0f, 1.0f, 1.0f, 1.0f);
+            drawCircleApprox(x, 0.6f, 0.1f, 0.0f, 1.0f, 1.0f, 1.0f);
+            drawCircleApprox(x + 0.05f, 0.6f, 0.08f, 0.0f, 1.0f, 1.0f, 1.0f);
+            drawCircleApprox(x - 0.02f, 0.65f, 0.06f, 0.0f, 1.0f, 1.0f, 1.0f);
+            drawCircleApprox(x + 0.02f, 0.65f, 0.06f, 0.0f, 1.0f, 1.0f, 1.0f);
+        }
+    }
+
+    /**
+     * Dibuja el suelo inferior con franja verde y césped decorativo.
+     * El suelo se mueve para sensación de velocidad.
+     */
+    private void dibujarSuelo() {
+        // Franja de suelo verde/marrón.
+        drawRect(0.0f + offsetSuelo * 0.1f, -0.9f, 4.0f, 0.2f, 0.0f, 0.2f, 0.5f, 0.1f);
+
+        // Césped decorativo encima del suelo.
+        for (float cesped : cespedX) {
+            float x = cesped + offsetSuelo;
+            drawTriangle(x, -0.8f, 0.02f, 0.0f, 0.1f, 0.4f, 0.1f); // Triángulos verdes pequeños.
+        }
+    }
+
+    /**
+     * Dibuja una tubería decorada con borde, sombra y tapas.
+     * Mejora visual sin afectar la colisión.
+     */
+    private void dibujarTuberiaDecorada(Tuberia t) {
+        // Calcular limites verticales del hueco.
+        float gapTop = t.gapCentroY + (GAP_ALTO * 0.5f);
+        float gapBottom = t.gapCentroY - (GAP_ALTO * 0.5f);
+
+        // Tramo superior de tuberia.
+        float altoSuperior = 1.0f - gapTop;
+        if (altoSuperior > 0.0f) {
+            float yCentroSup = gapTop + (altoSuperior * 0.5f);
+            // Sombra lateral.
+            drawRect(t.x + 0.01f, yCentroSup, TUBERIA_ANCHO, altoSuperior, 0.0f, 0.1f, 0.5f, 0.15f);
+            // Cuerpo principal.
+            drawRect(t.x, yCentroSup, TUBERIA_ANCHO, altoSuperior, 0.0f, 0.18f, 0.70f, 0.25f);
+            // Borde.
+            drawRect(t.x, yCentroSup, TUBERIA_ANCHO + 0.01f, altoSuperior + 0.01f, 0.0f, 0.1f, 0.6f, 0.2f);
+            // Tapa superior.
+            drawRect(t.x, gapTop + 0.02f, TUBERIA_ANCHO + 0.04f, 0.04f, 0.0f, 0.15f, 0.65f, 0.22f);
+        }
+
+        // Tramo inferior de tuberia.
+        float altoInferior = gapBottom + 1.0f;
+        if (altoInferior > 0.0f) {
+            float yCentroInf = -1.0f + (altoInferior * 0.5f);
+            // Sombra lateral.
+            drawRect(t.x + 0.01f, yCentroInf, TUBERIA_ANCHO, altoInferior, 0.0f, 0.1f, 0.5f, 0.15f);
+            // Cuerpo principal.
+            drawRect(t.x, yCentroInf, TUBERIA_ANCHO, altoInferior, 0.0f, 0.18f, 0.70f, 0.25f);
+            // Borde.
+            drawRect(t.x, yCentroInf, TUBERIA_ANCHO + 0.01f, altoInferior + 0.01f, 0.0f, 0.1f, 0.6f, 0.2f);
+            // Tapa inferior.
+            drawRect(t.x, gapBottom - 0.02f, TUBERIA_ANCHO + 0.04f, 0.04f, 0.0f, 0.15f, 0.65f, 0.22f);
         }
     }
 
