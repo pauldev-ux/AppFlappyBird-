@@ -647,9 +647,21 @@ public class AppFlappyBird {
         // Dibujar indicador visual de dificultad (5 cuadros en esquina superior derecha).
         dibujarIndicadorDificultad();
 
-        // Overlay simple de game over (sin texto en framebuffer).
         if (gameOver) {
-            drawRect(0.0f, 0.0f, 2.0f, 0.22f, 0.0f, 0.15f, 0.18f, 0.22f);
+            // Fondo oscuro para separar el panel del escenario.
+            drawRect(0.0f, 0.0f, 2.0f, 2.0f, 0.0f, 0.04f, 0.04f, 0.06f);
+
+            // Panel central más grande y oscuro.
+            drawRect(0.0f, 0.0f, 0.70f, 0.36f, 0.0f, 0.02f, 0.02f, 0.04f);
+            drawRect(0.0f, 0.0f, 0.66f, 0.32f, 0.0f, 0.10f, 0.10f, 0.18f);
+            drawRect(0.0f, 0.0f, 0.63f, 0.28f, 0.0f, 0.16f, 0.16f, 0.24f);
+
+            // Texto con sombra y tamaño ligeramente reducido para mejor proporción.
+            drawCenteredTextWithShadow("GAME OVER", 0.0f, 0.08f, 1.08f, 1.0f, 0.25f, 0.25f, 0.025f, 0.025f);
+            drawCenteredTextWithShadow("PRESIONE R PARA REINICIAR", 0.0f, -0.04f, 0.47f, 1.0f, 0.92f, 0.6f, 0.02f, 0.02f);
+
+            // Ícono de reinicio debajo del subtítulo.
+            dibujarIconoReinicio(0.0f, -0.16f, 0.10f);
         }
     }
 
@@ -782,6 +794,202 @@ public class AppFlappyBird {
 
     private float toRadians(float degrees) {
         return degrees * ((float) Math.PI / 180.0f);
+    }
+
+    /**
+     * Calcula el ancho total de un texto usando ancho fijo por carácter.
+     */
+    private float calcularAnchoTexto(String texto, float escala) {
+        float anchoCaracter = 0.14f * escala;
+        float espacioEntreCaracteres = 0.04f * escala;
+        float anchoEspacio = 0.08f * escala;
+        float anchoTotal = 0.0f;
+
+        for (int i = 0; i < texto.length(); i++) {
+            char c = texto.charAt(i);
+            anchoTotal += (c == ' ') ? anchoEspacio : anchoCaracter;
+            if (i < texto.length() - 1) {
+                anchoTotal += espacioEntreCaracteres;
+            }
+        }
+        return anchoTotal;
+    }
+
+    /**
+     * Dibuja texto centrado con sombra para mejor legibilidad.
+     */
+    private void drawCenteredTextWithShadow(String text, float centerX, float y, float scale,
+            float r, float g, float b, float shadowOffsetX, float shadowOffsetY) {
+        drawCenteredText(text, centerX + shadowOffsetX, y + shadowOffsetY, scale, 0.0f, 0.0f, 0.0f);
+        drawCenteredText(text, centerX, y, scale, r, g, b);
+    }
+
+    /**
+     * Dibuja un texto centrado horizontalmente usando letras geométricas.
+     */
+    private void drawCenteredText(String text, float centerX, float y, float scale,
+            float r, float g, float b) {
+        float totalWidth = calcularAnchoTexto(text, scale);
+        float startX = centerX - totalWidth / 2.0f;
+        float charWidth = 0.14f * scale;
+        float charSpacing = 0.04f * scale;
+        float spaceWidth = 0.08f * scale;
+
+        for (int i = 0; i < text.length(); i++) {
+            char c = Character.toUpperCase(text.charAt(i));
+            if (c == ' ') {
+                startX += spaceWidth + charSpacing;
+                continue;
+            }
+            drawCharacter(c, startX, y, scale, r, g, b);
+            startX += charWidth + charSpacing;
+        }
+    }
+
+    /**
+     * Dibuja un carácter en un grid de bloques 5x4.
+     */
+    private void drawCharacter(char letra, float x, float y, float scale,
+            float r, float g, float b) {
+        boolean[][] pattern = getBlockPattern(letra);
+        if (pattern == null) {
+            return;
+        }
+
+        float width = 0.14f * scale;
+        float height = 0.18f * scale;
+        float paddingX = 0.01f * scale;
+        float paddingY = 0.01f * scale;
+        float blockWidth = (width - paddingX * 3) / 4.0f;
+        float blockHeight = (height - paddingY * 4) / 5.0f;
+
+        for (int row = 0; row < pattern.length; row++) {
+            for (int col = 0; col < pattern[row].length; col++) {
+                if (!pattern[row][col]) {
+                    continue;
+                }
+                float blockX = x + col * (blockWidth + paddingX) + blockWidth / 2.0f;
+                float blockY = y + (4 - row) * (blockHeight + paddingY) + blockHeight / 2.0f;
+                drawRect(blockX, blockY, blockWidth, blockHeight, 0.0f, r, g, b);
+            }
+        }
+    }
+
+    private boolean[][] getBlockPattern(char c) {
+        switch (c) {
+            case 'G': return new boolean[][] {
+                { true, true, true, true },
+                { true, false, false, false },
+                { true, false, true, true },
+                { true, false, false, true },
+                { true, true, true, true }
+            };
+            case 'A': return new boolean[][] {
+                { false, true, true, false },
+                { true, false, false, true },
+                { true, true, true, true },
+                { true, false, false, true },
+                { true, false, false, true }
+            };
+            case 'M': return new boolean[][] {
+                { true, false, false, true },
+                { true, true, true, true },
+                { true, false, false, true },
+                { true, false, false, true },
+                { true, false, false, true }
+            };
+            case 'E': return new boolean[][] {
+                { true, true, true, true },
+                { true, false, false, false },
+                { true, true, true, false },
+                { true, false, false, false },
+                { true, true, true, true }
+            };
+            case 'O': return new boolean[][] {
+                { true, true, true, true },
+                { true, false, false, true },
+                { true, false, false, true },
+                { true, false, false, true },
+                { true, true, true, true }
+            };
+            case 'V': return new boolean[][] {
+                { true, false, false, true },
+                { true, false, false, true },
+                { true, false, false, true },
+                { false, true, true, false },
+                { false, true, true, false }
+            };
+            case 'R': return new boolean[][] {
+                { true, true, true, false },
+                { true, false, false, true },
+                { true, true, true, false },
+                { true, false, true, false },
+                { true, false, false, true }
+            };
+            case 'P': return new boolean[][] {
+                { true, true, true, false },
+                { true, false, false, true },
+                { true, true, true, false },
+                { true, false, false, false },
+                { true, false, false, false }
+            };
+            case 'S': return new boolean[][] {
+                { true, true, true, true },
+                { true, false, false, false },
+                { true, true, true, true },
+                { false, false, false, true },
+                { true, true, true, true }
+            };
+            case 'I': return new boolean[][] {
+                { true, true, true, true },
+                { false, true, false, false },
+                { false, true, false, false },
+                { false, true, false, false },
+                { true, true, true, true }
+            };
+            case 'N': return new boolean[][] {
+                { true, false, false, true },
+                { true, true, false, true },
+                { true, false, true, true },
+                { true, false, false, true },
+                { true, false, false, true }
+            };
+            case 'T': return new boolean[][] {
+                { true, true, true, true },
+                { false, true, false, false },
+                { false, true, false, false },
+                { false, true, false, false },
+                { false, true, false, false }
+            };
+            case 'U': return new boolean[][] {
+                { true, false, false, true },
+                { true, false, false, true },
+                { true, false, false, true },
+                { true, false, false, true },
+                { true, true, true, true }
+            };
+            case 'C': return new boolean[][] {
+                { true, true, true, true },
+                { true, false, false, false },
+                { true, false, false, false },
+                { true, false, false, false },
+                { true, true, true, true }
+            };
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * Dibuja un ícono de reinicio: flecha circular aproximada.
+     */
+    private void dibujarIconoReinicio(float x, float y, float size) {
+        // Círculo exterior
+        drawCircleApprox(x, y, size * 0.5f, 0.0f, 0.0f, 0.8f, 0.0f);
+        // Flecha: triángulo apuntando a la derecha
+        drawTriangle(x + size * 0.2f, y, size * 0.3f, 0.0f, 0.0f, 0.8f, 0.0f);
+        // Cola de la flecha
+        drawRect(x - size * 0.1f, y, size * 0.3f, size * 0.05f, 0.0f, 0.0f, 0.8f, 0.0f);
     }
 
     // Actualiza feedback visual en barra de titulo.
