@@ -44,7 +44,7 @@
       Puedes cambiar la clase desde la terminal sin tocar el POM:
         mvn exec:exec -DmainClass=com.graphics.OtraClase
     -->
-    <mainClass>com.graphics.App</mainClass>
+    <mainClass>com.graphics.AppFlappyBird</mainClass>
   </properties>
 
   <!--
