@@ -10,19 +10,30 @@ import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
 
 public class Renderer {
+    // Programa shader usado para dibujar las figuras.
     private int program;
+
+    // VAO/VBO del rectángulo base.
     private int vaoQuad;
     private int vboQuad;
+
+    // VAO/VBO del triángulo base.
     private int vaoTriangle;
     private int vboTriangle;
+
+    // VAO/VBO del círculo aproximado.
     private int vaoCircle;
     private int vboCircle;
 
+    // Uniforms del shader.
+    // Sirven para cambiar posición, escala, rotación y color.
     private int uOffsetLocation;
     private int uScaleLocation;
     private int uRotationLocation;
     private int uColorLocation;
 
+    // Inicializa shaders y figuras base.
+    // Si agregas otra figura base, también debes crearla aquí.
     public void init() {
         crearShaders();
         crearQuadBase();
@@ -30,6 +41,7 @@ public class Renderer {
         crearCircleApprox();
     }
 
+    // Libera recursos de OpenGL al cerrar el juego.
     public void cleanup() {
         GL30.glDeleteVertexArrays(vaoQuad);
         GL15.glDeleteBuffers(vboQuad);
@@ -40,25 +52,34 @@ public class Renderer {
         GL20.glDeleteProgram(program);
     }
 
+    // Dibuja toda la escena del juego.
+    // Para cambiar el orden de dibujo, mueve las llamadas dentro de este método.
     public void renderScene(GameState gameState, Bird player1, Bird player2, List<Pipe> pipes,
             List<Float> cloudsX, List<Float> grassX,
             float offsetClouds, float offsetMountains, float offsetGround,
             int difficultyLevel, float wingAnimTime, float wingAngle) {
+
+        // Color base del fondo antes de dibujar el escenario.
         GL11.glClearColor(0.52f, 0.80f, 0.92f, 1.0f);
         GL11.glClear(GL11.GL_COLOR_BUFFER_BIT);
 
         GL20.glUseProgram(program);
+
+        // Orden importante: fondo primero, luego objetos, luego HUD.
         drawBackground(cloudsX, offsetClouds, offsetMountains, offsetGround, grassX);
         drawPipes(pipes);
         drawBird(player1, wingAnimTime, wingAngle);
         drawBird(player2, wingAnimTime, wingAngle);
         drawHUD(difficultyLevel);
 
+        // Si el juego terminó, dibuja el panel encima de todo.
         if (gameState == GameState.GAME_OVER) {
             drawGameOver();
         }
     }
 
+    // Dibuja un rectángulo.
+    // Para cambiar color, modifica r, g, b. Ejemplo rojo: 1.0f, 0.0f, 0.0f.
     public void drawRect(float x, float y, float ancho, float alto, float rotation, float r, float g, float b) {
         GL30.glBindVertexArray(vaoQuad);
         GL20.glUniform2f(uOffsetLocation, x, y);
@@ -68,6 +89,8 @@ public class Renderer {
         GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, 6);
     }
 
+    // Dibuja un triángulo.
+    // Se usa para pico, ala, cola, montañas y césped.
     public void drawTriangle(float x, float y, float scale, float rotation, float r, float g, float b) {
         GL30.glBindVertexArray(vaoTriangle);
         GL20.glUniform2f(uOffsetLocation, x, y);
@@ -77,6 +100,8 @@ public class Renderer {
         GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, 3);
     }
 
+    // Dibuja un círculo aproximado.
+    // Para que sea más redondo, aumenta numSegments en crearCircleApprox().
     public void drawCircleApprox(float x, float y, float radius, float rotation, float r, float g, float b) {
         GL30.glBindVertexArray(vaoCircle);
         GL20.glUniform2f(uOffsetLocation, x, y);
@@ -86,54 +111,82 @@ public class Renderer {
         GL11.glDrawArrays(GL11.GL_TRIANGLE_FAN, 0, 14);
     }
 
+    // Dibuja el pájaro completo con figuras geométricas.
+    // Para cambiar la forma del pájaro, modifica tamaños y offsets dentro de este método.
     public void drawBird(Bird bird, float wingAnimTime, float wingAngle) {
         float birdRotation = calculateBirdRotation(bird);
         float x = bird.getX();
         float y = bird.getY();
+
+        // Tamaño visual del cuerpo.
+        // Para hacer el pájaro más grande, aumenta bodyScale.
         float bodyScale = 1.5f;
         float bodyRadius = GameConfig.BIRD_WIDTH * 0.35f * bodyScale;
 
+        // Cuerpo principal.
+        // El color viene desde Bird.
         drawCircleApprox(x, y, bodyRadius, birdRotation, bird.getColorR(), bird.getColorG(), bird.getColorB());
 
+        // Pico del pájaro.
+        // Para cambiar el color del pico, modifica estos RGB: 0.9f, 0.6f, 0.1f.
         float beakOffsetX = bodyRadius * 0.85f;
         float beakScale = GameConfig.BIRD_WIDTH * 0.15f * bodyScale;
         float[] beakOffset = rotateOffset(beakOffsetX, 0.0f, birdRotation);
         drawTriangle(x + beakOffset[0], y + beakOffset[1], beakScale, birdRotation - toRadians(90.0f), 0.9f, 0.6f, 0.1f);
 
+        // Ala animada.
+        // Para agrandar el ala, aumenta wingScale.
         float wingOffsetX = -bodyRadius * 0.45f;
         float wingScale = GameConfig.BIRD_WIDTH * 0.25f * bodyScale;
         float[] wingOffset = rotateOffset(wingOffsetX, 0.0f, birdRotation);
+
+        // Movimiento suave del ala.
+        // Para más movimiento, cambia WING_OSCILLATION_AMPLITUDE en GameConfig.
         float wingOscillation = (float) Math.sin(wingAnimTime * GameConfig.WING_OSCILLATION_SPEED) * GameConfig.WING_OSCILLATION_AMPLITUDE;
+
         drawTriangle(x + wingOffset[0], y + wingOffset[1], wingScale,
                 birdRotation + toRadians(90.0f) + wingAngle + wingOscillation,
                 0.8f, 0.7f, 0.15f);
 
+        // Cola del pájaro.
+        // Para hacer la cola más larga, aumenta tailScale.
         float tailOffsetX = -bodyRadius * 1.05f;
         float tailY = bodyRadius * 0.3f;
         float tailScale = GameConfig.BIRD_WIDTH * 0.12f * bodyScale;
+
         float[] tailOffsetUp = rotateOffset(tailOffsetX, tailY, birdRotation);
         float[] tailOffsetDown = rotateOffset(tailOffsetX, -tailY, birdRotation);
+
         drawTriangle(x + tailOffsetUp[0], y + tailOffsetUp[1], tailScale, birdRotation + toRadians(90.0f), 0.98f, 0.85f, 0.20f);
         drawTriangle(x + tailOffsetDown[0], y + tailOffsetDown[1], tailScale, birdRotation + toRadians(90.0f), 0.98f, 0.85f, 0.20f);
 
+        // Ojo blanco.
+        // Para mover el ojo, cambia eyeOffsetX o eyeOffsetY.
         float eyeOffsetX = bodyRadius * 0.4f;
         float eyeOffsetY = bodyRadius * 0.45f;
         float eyeRadius = bodyRadius * 0.18f;
+
         float[] eyeOffset = rotateOffset(eyeOffsetX, eyeOffsetY, birdRotation);
         drawCircleApprox(x + eyeOffset[0], y + eyeOffset[1], eyeRadius, birdRotation, 1.0f, 1.0f, 1.0f);
 
+        // Pupila negra.
+        // Para agrandar la pupila, aumenta pupilRadius.
         float pupilOffsetX = eyeOffsetX + eyeRadius * 0.3f;
         float pupilRadius = eyeRadius * 0.4f;
+
         float[] pupilOffset = rotateOffset(pupilOffsetX, eyeOffsetY, birdRotation);
         drawCircleApprox(x + pupilOffset[0], y + pupilOffset[1], pupilRadius, birdRotation, 0.0f, 0.0f, 0.0f);
     }
 
+    // Dibuja todas las tuberías activas.
     public void drawPipes(List<Pipe> pipes) {
         for (Pipe pipe : pipes) {
             drawDecoratedPipe(pipe);
         }
     }
 
+    // Dibuja el escenario: cielo, montañas, nubes y suelo.
+    // Para cambiar colores del fondo, revisa drawSkyGradient().
     public void drawBackground(List<Float> cloudsX, float offsetClouds, float offsetMountains, float offsetGround, List<Float> grassX) {
         drawSkyGradient();
         drawMountains(offsetMountains);
@@ -141,20 +194,38 @@ public class Renderer {
         drawGround(offsetGround, grassX);
     }
 
+    // Dibuja elementos de interfaz.
+    // Actualmente solo muestra dificultad con cuadros.
     public void drawHUD(int difficultyLevel) {
         drawDifficultyIndicator(difficultyLevel);
     }
 
+    // Dibuja la pantalla de Game Over.
+    // Para cambiar tamaño del texto, modifica las escalas 1.08f y 0.47f.
     public void drawGameOver() {
+        // Oscurece toda la pantalla.
         drawRect(0.0f, 0.0f, 2.0f, 2.0f, 0.0f, 0.0f, 0.04f, 0.04f);
+
+        // Panel central.
+        // Para hacerlo más grande, aumenta 0.70f y 0.36f.
         drawRect(0.0f, 0.0f, 0.70f, 0.36f, 0.0f, 0.0f, 0.02f, 0.02f);
         drawRect(0.0f, 0.0f, 0.66f, 0.32f, 0.0f, 0.10f, 0.10f, 0.18f);
         drawRect(0.0f, 0.0f, 0.63f, 0.28f, 0.0f, 0.16f, 0.16f, 0.24f);
+
+        // Texto principal.
+        // Para cambiar el color, modifica RGB: 1.0f, 0.25f, 0.25f.
         drawCenteredTextWithShadow("GAME OVER", 0.0f, 0.08f, 1.08f, 1.0f, 0.25f, 0.25f, 0.025f, 0.025f);
+
+        // Texto secundario.
+        // Para hacerlo más pequeño o grande, cambia 0.47f.
         drawCenteredTextWithShadow("PRESIONE R PARA REINICIAR", 0.0f, -0.04f, 0.47f, 1.0f, 0.92f, 0.6f, 0.02f, 0.02f);
+
+        // Ícono visual de reinicio.
         drawRestartIcon(0.0f, -0.16f, 0.10f);
     }
 
+    // Crea el shader de vértices y fragmentos.
+    // El vertex shader aplica escala, rotación y posición.
     private void crearShaders() {
         String vertexSrc = """
             #version 330 core
@@ -175,6 +246,7 @@ public class Renderer {
             }
             """;
 
+        // Fragment shader: pinta cada figura con un color RGB.
         String fragmentSrc = """
             #version 330 core
             uniform vec3 uColor;
@@ -203,10 +275,12 @@ public class Renderer {
             throw new RuntimeException("Error al enlazar programa: " + GL20.glGetProgramInfoLog(program));
         }
 
+        // Guarda ubicaciones de uniforms para usarlas en drawRect, drawTriangle y drawCircleApprox.
         uOffsetLocation = GL20.glGetUniformLocation(program, "uOffset");
         uScaleLocation = GL20.glGetUniformLocation(program, "uScale");
         uRotationLocation = GL20.glGetUniformLocation(program, "uRotation");
         uColorLocation = GL20.glGetUniformLocation(program, "uColor");
+
         if (uOffsetLocation == -1 || uScaleLocation == -1 || uRotationLocation == -1 || uColorLocation == -1) {
             throw new RuntimeException("No se pudieron obtener uniforms del shader");
         }
@@ -215,12 +289,15 @@ public class Renderer {
         GL20.glDeleteShader(fragmentShader);
     }
 
+    // Verifica si un shader compiló correctamente.
     private void comprobarShader(int shader, String tipo) {
         if (GL20.glGetShaderi(shader, GL20.GL_COMPILE_STATUS) == GL11.GL_FALSE) {
             throw new RuntimeException(tipo + " shader: " + GL20.glGetShaderInfoLog(shader));
         }
     }
 
+    // Crea el rectángulo base.
+    // Este rectángulo se reutiliza para fondo, suelo, tuberías, paneles y texto.
     private void crearQuadBase() {
         float[] vertices = {
             -0.5f, -0.5f, 0.0f,
@@ -233,11 +310,13 @@ public class Renderer {
 
         vaoQuad = GL30.glGenVertexArrays();
         GL30.glBindVertexArray(vaoQuad);
+
         vboQuad = GL15.glGenBuffers();
         GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboQuad);
 
         FloatBuffer buffer = BufferUtils.createFloatBuffer(vertices.length);
         buffer.put(vertices).flip();
+
         GL15.glBufferData(GL15.GL_ARRAY_BUFFER, buffer, GL15.GL_STATIC_DRAW);
 
         GL20.glVertexAttribPointer(0, 3, GL11.GL_FLOAT, false, 3 * Float.BYTES, 0);
@@ -247,6 +326,8 @@ public class Renderer {
         GL30.glBindVertexArray(0);
     }
 
+    // Crea el triángulo base.
+    // Se usa para pico, ala, cola, montañas y césped.
     private void crearTriangle() {
         float[] vertices = {
             0.0f,  0.5f, 0.0f,
@@ -256,11 +337,13 @@ public class Renderer {
 
         vaoTriangle = GL30.glGenVertexArrays();
         GL30.glBindVertexArray(vaoTriangle);
+
         vboTriangle = GL15.glGenBuffers();
         GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboTriangle);
 
         FloatBuffer buffer = BufferUtils.createFloatBuffer(vertices.length);
         buffer.put(vertices).flip();
+
         GL15.glBufferData(GL15.GL_ARRAY_BUFFER, buffer, GL15.GL_STATIC_DRAW);
 
         GL20.glVertexAttribPointer(0, 3, GL11.GL_FLOAT, false, 3 * Float.BYTES, 0);
@@ -270,9 +353,12 @@ public class Renderer {
         GL30.glBindVertexArray(0);
     }
 
+    // Crea un círculo aproximado usando triangle fan.
+    // Para hacerlo más suave, aumenta numSegments, por ejemplo 24.
     private void crearCircleApprox() {
         int numSegments = 12;
         float[] vertices = new float[(numSegments + 2) * 3];
+
         vertices[0] = 0.0f;
         vertices[1] = 0.0f;
         vertices[2] = 0.0f;
@@ -281,6 +367,7 @@ public class Renderer {
             double angle = 2.0 * Math.PI * i / numSegments;
             float x = (float) Math.cos(angle) * 0.5f;
             float y = (float) Math.sin(angle) * 0.5f;
+
             vertices[(i + 1) * 3] = x;
             vertices[(i + 1) * 3 + 1] = y;
             vertices[(i + 1) * 3 + 2] = 0.0f;
@@ -288,11 +375,13 @@ public class Renderer {
 
         vaoCircle = GL30.glGenVertexArrays();
         GL30.glBindVertexArray(vaoCircle);
+
         vboCircle = GL15.glGenBuffers();
         GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboCircle);
 
         FloatBuffer buffer = BufferUtils.createFloatBuffer(vertices.length);
         buffer.put(vertices).flip();
+
         GL15.glBufferData(GL15.GL_ARRAY_BUFFER, buffer, GL15.GL_STATIC_DRAW);
 
         GL20.glVertexAttribPointer(0, 3, GL11.GL_FLOAT, false, 3 * Float.BYTES, 0);
@@ -302,34 +391,46 @@ public class Renderer {
         GL30.glBindVertexArray(0);
     }
 
+    // Rota un offset alrededor del centro del pájaro.
+    // Sirve para que pico, ala, cola y ojo giren junto al cuerpo.
     private float[] rotateOffset(float offsetX, float offsetY, float rotation) {
         float cos = (float) Math.cos(rotation);
         float sin = (float) Math.sin(rotation);
+
         return new float[] {
             offsetX * cos - offsetY * sin,
             offsetX * sin + offsetY * cos
         };
     }
 
+    // Calcula la inclinación visual del pájaro según su velocidad.
+    // Si sube se inclina hacia arriba; si cae se inclina hacia abajo.
     private float calculateBirdRotation(Bird bird) {
         float maxUp = 25.0f;
         float maxDown = -45.0f;
         float rotationDeg;
+
         if (bird.getVelocityY() >= 0.0f) {
             rotationDeg = (bird.getVelocityY() / GameConfig.JUMP_IMPULSE) * maxUp;
         } else {
             rotationDeg = (bird.getVelocityY() / GameConfig.MAX_FALL_SPEED) * maxDown;
         }
+
         rotationDeg = Math.max(Math.min(rotationDeg, maxUp), maxDown);
         return toRadians(rotationDeg);
     }
 
+    // Convierte grados a radianes.
+    // OpenGL aquí usa radianes para la rotación.
     private float toRadians(float degrees) {
         return degrees * ((float) Math.PI / 180.0f);
     }
 
+    // Dibuja un cielo con franjas para simular degradado.
+    // Para cambiar el color del cielo, modifica el arreglo colors.
     private void drawSkyGradient() {
         float[] stripesY = { 0.8f, 0.6f, 0.4f, 0.2f, 0.0f, -0.2f, -0.4f, -0.6f };
+
         float[] colors = {
             0.4f, 0.7f, 0.95f,
             0.5f, 0.75f, 0.95f,
@@ -340,26 +441,34 @@ public class Renderer {
             0.8f, 0.94f, 0.95f,
             0.85f, 0.96f, 0.95f
         };
+
         for (int i = 0; i < stripesY.length; i++) {
             float y = stripesY[i];
             float r = colors[i * 3];
             float g = colors[i * 3 + 1];
             float b = colors[i * 3 + 2];
+
             drawRect(0.0f, y, 2.0f, 0.4f, 0.0f, r, g, b);
         }
     }
 
+    // Dibuja montañas al fondo.
+    // Para agregar más montañas, modifica MOUNTAINS_X y MOUNTAINS_HEIGHTS en GameConfig.
     private void drawMountains(float offsetMountains) {
         for (int i = 0; i < GameConfig.MOUNTAINS_X.length; i++) {
             float x = GameConfig.MOUNTAINS_X[i] + offsetMountains;
             float height = GameConfig.MOUNTAINS_HEIGHTS[i];
+
             drawTriangle(x, -0.5f + height * 0.5f, height, 0.0f, 0.3f, 0.6f, 0.3f);
         }
     }
 
+    // Dibuja nubes usando varios círculos.
+    // Para cambiar color de nubes, modifica los RGB 1.0f, 1.0f, 1.0f.
     private void drawClouds(List<Float> cloudsX, float offsetClouds) {
         for (float cloudX : cloudsX) {
             float x = cloudX + offsetClouds;
+
             drawCircleApprox(x - 0.05f, 0.6f, 0.08f, 0.0f, 1.0f, 1.0f, 1.0f);
             drawCircleApprox(x, 0.6f, 0.10f, 0.0f, 1.0f, 1.0f, 1.0f);
             drawCircleApprox(x + 0.05f, 0.6f, 0.08f, 0.0f, 1.0f, 1.0f, 1.0f);
@@ -368,80 +477,122 @@ public class Renderer {
         }
     }
 
+    // Dibuja el suelo y el césped.
+    // Para cambiar color del suelo, modifica los RGB del primer drawRect.
     private void drawGround(float offsetGround, List<Float> grassX) {
         drawRect(0.0f + offsetGround * 0.1f, -0.9f, 4.0f, 0.2f, 0.0f, 0.2f, 0.5f, 0.1f);
+
         for (float grass : grassX) {
             float x = grass + offsetGround;
             drawTriangle(x, -0.8f, 0.02f, 0.0f, 0.1f, 0.4f, 0.1f);
         }
     }
 
+    // Dibuja los 5 cuadros de dificultad.
+    // Para cambiar el color activo, modifica RGB 0.2f, 0.9f, 0.3f.
     private void drawDifficultyIndicator(int difficulty) {
         final float SIZE = 0.05f;
         final float SPACING = 0.06f;
         final float MARGIN_RIGHT = 0.05f;
         final float MARGIN_TOP = 0.05f;
+
         float startX = 0.9f - MARGIN_RIGHT;
         float y = 0.95f - MARGIN_TOP;
 
         for (int i = 0; i < GameConfig.LEVEL_MAX; i++) {
             float x = startX - i * SPACING;
+
             if (i < difficulty) {
+                // Cuadro activo de dificultad.
                 drawRect(x, y, SIZE, SIZE, 0.0f, 0.2f, 0.9f, 0.3f);
             } else {
+                // Cuadro inactivo.
                 drawRect(x, y, SIZE, SIZE, 0.0f, 1.0f, 1.0f, 1.0f);
             }
         }
     }
 
+    // Dibuja una tubería con sombra, cuerpo y tapa.
+    // Para cambiar color de tuberías, modifica los RGB dentro de este método.
     private void drawDecoratedPipe(Pipe pipe) {
         float gapTop = pipe.gapCentroY + (GameConfig.GAP_HEIGHT * 0.5f);
         float gapBottom = pipe.gapCentroY - (GameConfig.GAP_HEIGHT * 0.5f);
 
+        // Parte superior de la tubería.
         float topHeight = 1.0f - gapTop;
+
         if (topHeight > 0.0f) {
             float centerY = gapTop + topHeight * 0.5f;
+
+            // Sombra.
             drawRect(pipe.x + 0.01f, centerY, GameConfig.PIPE_WIDTH, topHeight, 0.0f, 0.1f, 0.5f, 0.15f);
+
+            // Cuerpo principal.
             drawRect(pipe.x, centerY, GameConfig.PIPE_WIDTH, topHeight, 0.0f, 0.18f, 0.70f, 0.25f);
+
+            // Borde o resaltado.
             drawRect(pipe.x, centerY, GameConfig.PIPE_WIDTH + 0.01f, topHeight + 0.01f, 0.0f, 0.1f, 0.6f, 0.2f);
+
+            // Tapa de tubería.
             drawRect(pipe.x, gapTop + 0.02f, GameConfig.PIPE_WIDTH + 0.04f, 0.04f, 0.0f, 0.15f, 0.65f, 0.22f);
         }
 
+        // Parte inferior de la tubería.
         float bottomHeight = gapBottom + 1.0f;
+
         if (bottomHeight > 0.0f) {
             float centerY = -1.0f + bottomHeight * 0.5f;
+
+            // Sombra.
             drawRect(pipe.x + 0.01f, centerY, GameConfig.PIPE_WIDTH, bottomHeight, 0.0f, 0.1f, 0.5f, 0.15f);
+
+            // Cuerpo principal.
             drawRect(pipe.x, centerY, GameConfig.PIPE_WIDTH, bottomHeight, 0.0f, 0.18f, 0.70f, 0.25f);
+
+            // Borde o resaltado.
             drawRect(pipe.x, centerY, GameConfig.PIPE_WIDTH + 0.01f, bottomHeight + 0.01f, 0.0f, 0.1f, 0.6f, 0.2f);
+
+            // Tapa de tubería.
             drawRect(pipe.x, gapBottom - 0.02f, GameConfig.PIPE_WIDTH + 0.04f, 0.04f, 0.0f, 0.15f, 0.65f, 0.22f);
         }
     }
 
+    // Dibuja texto centrado con sombra.
+    // Para una sombra más marcada, aumenta shadowOffsetX y shadowOffsetY.
     private void drawCenteredTextWithShadow(String text, float centerX, float y, float scale,
             float r, float g, float b, float shadowOffsetX, float shadowOffsetY) {
+
         drawCenteredText(text, centerX + shadowOffsetX, y + shadowOffsetY, scale, 0.0f, 0.0f, 0.0f);
         drawCenteredText(text, centerX, y, scale, r, g, b);
     }
 
+    // Dibuja texto centrado usando letras de bloques.
+    // Para separar más las letras, aumenta charSpacing.
     private void drawCenteredText(String text, float centerX, float y, float scale,
             float r, float g, float b) {
+
         float totalWidth = calcularAnchoTexto(text, scale);
         float startX = centerX - totalWidth / 2.0f;
+
         float charWidth = 0.14f * scale;
         float charSpacing = 0.04f * scale;
         float spaceWidth = 0.08f * scale;
 
         for (int i = 0; i < text.length(); i++) {
             char c = Character.toUpperCase(text.charAt(i));
+
             if (c == ' ') {
                 startX += spaceWidth + charSpacing;
                 continue;
             }
+
             drawCharacter(c, startX, y, scale, r, g, b);
             startX += charWidth + charSpacing;
         }
     }
 
+    // Calcula el ancho total del texto.
+    // Esto permite centrar GAME OVER y otros mensajes.
     private float calcularAnchoTexto(String text, float scale) {
         float charWidth = 0.14f * scale;
         float spacing = 0.04f * scale;
@@ -450,17 +601,24 @@ public class Renderer {
 
         for (int i = 0; i < text.length(); i++) {
             char c = Character.toUpperCase(text.charAt(i));
+
             width += (c == ' ') ? spaceWidth : charWidth;
+
             if (i < text.length() - 1) {
                 width += spacing;
             }
         }
+
         return width;
     }
 
+    // Dibuja una letra usando bloques.
+    // Para letras más gruesas, aumenta blockWidth o blockHeight indirectamente con scale.
     private void drawCharacter(char letter, float x, float y, float scale,
             float r, float g, float b) {
+
         boolean[][] pattern = getBlockPattern(letter);
+
         if (pattern == null) {
             return;
         }
@@ -469,6 +627,7 @@ public class Renderer {
         float height = 0.18f * scale;
         float paddingX = 0.01f * scale;
         float paddingY = 0.01f * scale;
+
         float blockWidth = (width - paddingX * 3) / 4.0f;
         float blockHeight = (height - paddingY * 4) / 5.0f;
 
@@ -477,13 +636,17 @@ public class Renderer {
                 if (!pattern[row][col]) {
                     continue;
                 }
+
                 float blockX = x + col * (blockWidth + paddingX) + blockWidth / 2.0f;
                 float blockY = y + (4 - row) * (blockHeight + paddingY) + blockHeight / 2.0f;
+
                 drawRect(blockX, blockY, blockWidth, blockHeight, 0.0f, r, g, b);
             }
         }
     }
 
+    // Patrones de letras en matriz 4x5.
+    // Para agregar una letra nueva, crea un nuevo case con true/false.
     private boolean[][] getBlockPattern(char c) {
         switch (c) {
             case 'G': return new boolean[][] {
@@ -589,6 +752,8 @@ public class Renderer {
         }
     }
 
+    // Dibuja un ícono simple de reinicio.
+    // Para hacerlo más grande, aumenta size al llamar este método.
     private void drawRestartIcon(float x, float y, float size) {
         drawCircleApprox(x, y, size * 0.5f, 0.0f, 0.0f, 0.8f, 0.0f);
         drawTriangle(x + size * 0.2f, y, size * 0.3f, 0.0f, 0.0f, 0.8f, 0.0f);
