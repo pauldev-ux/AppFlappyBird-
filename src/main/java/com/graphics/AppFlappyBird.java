@@ -23,6 +23,7 @@ public class AppFlappyBird {
     // Para cambiar colores o posición inicial, revisa resetGame() y GameConfig.
     private Bird player1;
     private Bird player2;
+    private Bird player3;
 
     // Lista de tuberías activas en pantalla.
     private final List<Pipe> pipes = new ArrayList<>();
@@ -125,6 +126,14 @@ public class AppFlappyBird {
             player2.reset(0.0f);
         }
 
+        // Crea o reinicia jugador 3
+        if (player3 == null) {
+            player3 = new Bird(GameConfig.BIRD_X_PLAYER3, 0.0f,
+                    GameConfig.BIRD3_COLOR_R, GameConfig.BIRD3_COLOR_G, GameConfig.BIRD3_COLOR_B);
+        } else {
+            player3.reset(0.0f);
+        }
+
         // Reinicia animación y timers.
         timerSpawn = 0.0f;
         wingAnimTime = 0.0f;
@@ -183,6 +192,11 @@ public class AppFlappyBird {
             handleJump(player2);
         }
 
+        // Salto jugador 3.
+        if (inputManager.isJumpPlayer3Pressed()) {
+            handleJump(player3);
+        }
+
         // R reinicia solo desde Game Over.
         if (inputManager.isResetPressed() && gameState == GameState.GAME_OVER) {
             resetGame();
@@ -214,16 +228,18 @@ public class AppFlappyBird {
             return;
         }
 
-        // Actualiza física de ambos jugadores.
+        // Actualiza física de los tres jugadores.
         player1.update(dt);
         player2.update(dt);
+        player3.update(dt);
 
         // Revisa choque con techo o piso.
         checkBoundsCollision(player1);
         checkBoundsCollision(player2);
+        checkBoundsCollision(player3);
 
-        // Si ambos murieron, termina el juego.
-        if (!player1.isAlive() && !player2.isAlive()) {
+        // Si todos murieron, termina el juego.
+        if (!player1.isAlive() && !player2.isAlive() && !player3.isAlive()) {
             gameState = GameState.GAME_OVER;
             updateTitle();
             return;
@@ -275,13 +291,30 @@ public class AppFlappyBird {
                 scored = true;
             }
 
+            // Puntaje jugador 3 cuando supera una tubería.
+            if (player3.isAlive() && pipe.x + (GameConfig.PIPE_WIDTH * 0.5f) < player3.getX() && !pipe.puntuadaP3) {
+                player3.addScore();
+                pipe.puntuadaP3 = true;
+                scored = true;
+            }
+
             if (scored) {
                 updateTitle();
+            }
+
+            //////////////////////////////////////punto de victoria
+            if (player1.getScore() >= GameConfig.WIN_SCORE
+                    || player2.getScore() >= GameConfig.WIN_SCORE
+                    || player3.getScore() >= GameConfig.WIN_SCORE) {
+                gameState = GameState.GAME_OVER;
+                updateTitle();
+                return;
             }
 
             // Revisa colisiones con tubería.
             boolean collided1 = player1.isAlive() && collidesWithPipe(pipe, player1);
             boolean collided2 = player2.isAlive() && collidesWithPipe(pipe, player2);
+            boolean collided3 = player3.isAlive() && collidesWithPipe(pipe, player3);
 
             if (collided1) {
                 player1.kill();
@@ -291,8 +324,12 @@ public class AppFlappyBird {
                 player2.kill();
             }
 
-            // Game Over solo cuando ambos jugadores pierden.
-            if (!player1.isAlive() && !player2.isAlive()) {
+            if (collided3) {
+                player3.kill();
+            }
+
+            // Game Over solo cuando los tres jugadores pierden.
+            if (!player1.isAlive() && !player2.isAlive() && !player3.isAlive()) {
                 gameState = GameState.GAME_OVER;
                 updateTitle();
                 return;
@@ -357,6 +394,9 @@ public class AppFlappyBird {
     // Para cambiar movimiento del ala, modifica constantes WING_* en GameConfig.
     private void updateWingAngle(float dt) {
         Bird referenceBird = player1.isAlive() ? player1 : player2;
+        if (!referenceBird.isAlive()) {
+            referenceBird = player3;
+        }
 
         float targetAngle;
 
@@ -387,7 +427,7 @@ public class AppFlappyBird {
     // Calcula nivel con base en el puntaje más alto entre ambos jugadores.
     // Ejemplo: si POINTS_PER_LEVEL = 3, sube nivel cada 3 puntos.
     private int calculateDifficultyLevel() {
-        int maxScore = Math.max(player1.getScore(), player2.getScore());
+        int maxScore = Math.max(player1.getScore(), Math.max(player2.getScore(), player3.getScore()));
         int level = (maxScore / GameConfig.POINTS_PER_LEVEL) + 1;
 
         return Math.min(level, GameConfig.LEVEL_MAX);
@@ -432,13 +472,13 @@ public class AppFlappyBird {
     // Actualiza el título de la ventana con puntajes y estado.
     // Para mostrar más datos, agrega texto al String titleBase.
     private void updateTitle() {
-        String titleBase = String.format("Flappy Bird OpenGL | P1: %d  P2: %d",
-                player1.getScore(), player2.getScore());
+        String titleBase = String.format("Flappy Bird OpenGL | P1: %d  P2: %d  P3: %d",
+                player1.getScore(), player2.getScore(), player3.getScore());
 
         if (gameState == GameState.START) {
-            GLFW.glfwSetWindowTitle(window, titleBase + " | SPACE o W/ARRIBA para empezar");
+            GLFW.glfwSetWindowTitle(window, titleBase + " | SPACE, W/ARRIBA o ENTER para empezar");
         } else if (gameState == GameState.GAME_OVER) {
-            GLFW.glfwSetWindowTitle(window, titleBase + " | GAME OVER - SPACE o W/ARRIBA para reiniciar");
+            GLFW.glfwSetWindowTitle(window, titleBase + " | GAME OVER - R para reiniciar");
         } else {
             GLFW.glfwSetWindowTitle(window, titleBase);
         }
@@ -446,7 +486,7 @@ public class AppFlappyBird {
 
     // Llama al renderer para dibujar la escena.
     private void render() {
-        renderer.renderScene(gameState, player1, player2, pipes,
+        renderer.renderScene(gameState, player1, player2, player3, pipes,
                 cloudsX, grassX,
                 offsetClouds, offsetMountains, offsetGround,
                 difficultyLevel, wingAnimTime, wingAngle);

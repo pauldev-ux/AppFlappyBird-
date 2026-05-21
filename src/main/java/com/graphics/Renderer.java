@@ -54,7 +54,7 @@ public class Renderer {
 
     // Dibuja toda la escena del juego.
     // Para cambiar el orden de dibujo, mueve las llamadas dentro de este método.
-    public void renderScene(GameState gameState, Bird player1, Bird player2, List<Pipe> pipes,
+    public void renderScene(GameState gameState, Bird player1, Bird player2, Bird player3, List<Pipe> pipes,
             List<Float> cloudsX, List<Float> grassX,
             float offsetClouds, float offsetMountains, float offsetGround,
             int difficultyLevel, float wingAnimTime, float wingAngle) {
@@ -70,6 +70,7 @@ public class Renderer {
         drawPipes(pipes);
         drawBird(player1, wingAnimTime, wingAngle);
         drawBird(player2, wingAnimTime, wingAngle);
+        drawBird(player3, wingAnimTime, wingAngle);
         drawHUD(difficultyLevel);
 
         // Si el juego terminó, dibuja el panel encima de todo.
@@ -125,7 +126,7 @@ public class Renderer {
 
         // Cuerpo principal.
         // El color viene desde Bird.
-        drawCircleApprox(x, y, bodyRadius, birdRotation, bird.getColorR(), bird.getColorG(), bird.getColorB());
+        drawRect(x, y, bodyRadius * 2, bodyRadius * 2, birdRotation, bird.getColorR(), bird.getColorG(), bird.getColorB());
 
         // Pico del pájaro.
         // Para cambiar el color del pico, modifica estos RGB: 0.9f, 0.6f, 0.1f.

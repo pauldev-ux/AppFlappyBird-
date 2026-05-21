@@ -17,6 +17,9 @@ public class Pipe {
     // Permite que cada jugador tenga su puntaje independiente.
     public boolean puntuadaP2;
 
+    // Indica si esta tubería ya dio punto al jugador 3.
+    public boolean puntuadaP3;
+
     // Crea una tubería con posición X y centro del hueco.
     // Ejemplo: new Pipe(1.2f, 0.0f) crea una tubería a la derecha con hueco centrado.
     public Pipe(float x, float gapCentroY) {
@@ -24,5 +27,6 @@ public class Pipe {
         this.gapCentroY = gapCentroY;
         this.puntuadaP1 = false;
         this.puntuadaP2 = false;
+        this.puntuadaP3 = false;
     }
 }

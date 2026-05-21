@@ -1,15 +1,19 @@
 package com.graphics;
 
 public class GameConfig {
+
+    public static final int WIN_SCORE = 5;
+
     // Tamaño de la ventana del juego.
     // Para cambiar la resolución inicial, modifica WIDTH y HEIGHT.
-    public static final int WIDTH = 900;
-    public static final int HEIGHT = 700;
+    public static final int WIDTH = 1200;
+    public static final int HEIGHT = 900;
 
     // Posición horizontal inicial de cada jugador.
     // Más negativo = más a la izquierda, más positivo = más a la derecha.
     public static final float BIRD_X_PLAYER1 = -0.45f;
     public static final float BIRD_X_PLAYER2 = -0.15f;
+    public static final float BIRD_X_PLAYER3 = 0.15f;
 
     // Tamaño lógico del pájaro usado principalmente para colisiones.
     // Si lo aumentas, también cambia la zona donde choca.
@@ -60,6 +64,7 @@ public class GameConfig {
 
     // Velocidad base de las tuberías.
     // Para que el juego inicie más rápido, aumenta este valor.
+
     public static final float PIPE_SPEED = 0.62f;
 
     // Tiempo entre aparición de tuberías.
@@ -77,7 +82,7 @@ public class GameConfig {
 
     // Cada cuántos puntos sube la dificultad.
     // Por ejemplo, 5 haría que suba cada 5 tuberías pasadas.
-    public static final int POINTS_PER_LEVEL = 3;
+    public static final int POINTS_PER_LEVEL = 2;
 
     // Posiciones horizontales de las montañas del fondo.
     // Para agregar más montañas, añade más valores aquí y en MOUNTAINS_HEIGHTS.
@@ -98,6 +103,11 @@ public class GameConfig {
     public static final float BIRD2_COLOR_R = 0.35f;
     public static final float BIRD2_COLOR_G = 0.70f;
     public static final float BIRD2_COLOR_B = 0.98f;
+
+    //jugador 3.
+    public static final float BIRD3_COLOR_R = 0.70f;
+    public static final float BIRD3_COLOR_G = 0.38f;
+    public static final float BIRD3_COLOR_B = 0.95f;
 
     // Constructor privado para evitar crear objetos de configuración.
     private GameConfig() {

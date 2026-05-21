@@ -11,6 +11,9 @@ public class InputManager {
     // Sirve para evitar saltos repetidos al mantener la tecla.
     private boolean prevJump2;
 
+    // tercer jugador con enter
+    private boolean prevEnter;
+
     // Guarda si R estaba presionada antes.
     // Sirve para detectar un solo reinicio por pulsación.
     private boolean prevR;
@@ -23,6 +26,9 @@ public class InputManager {
 
     // Indica si jugador 2 presionó salto en este frame.
     private boolean jumpPlayer2Pressed;
+
+    // Indica si jugador 3 presionó salto en este frame.
+    private boolean jumpPlayer3Pressed;
 
     // Indica si se presionó R para reiniciar.
     private boolean resetPressed;
@@ -47,6 +53,11 @@ public class InputManager {
         jumpPlayer2Pressed = jump2Now && !prevJump2;
         prevJump2 = jump2Now;
 
+        //jugador 3 tecla enter
+        boolean enterNow = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_ENTER) == GLFW.GLFW_PRESS;
+        jumpPlayer3Pressed = enterNow && !prevEnter;
+        prevEnter = enterNow;
+
         // R sirve para reiniciar en Game Over.
         // Para cambiar reinicio a ENTER, usa GLFW_KEY_ENTER.
         boolean rNow = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_R) == GLFW.GLFW_PRESS;
@@ -67,6 +78,11 @@ public class InputManager {
     // Devuelve true solo cuando jugador 2 presiona W o Flecha Arriba una vez.
     public boolean isJumpPlayer2Pressed() {
         return jumpPlayer2Pressed;
+    }
+
+    // jugador 3 con enter 
+    public boolean isJumpPlayer3Pressed() {
+        return jumpPlayer3Pressed;
     }
 
     // Devuelve true solo cuando se presiona R una vez.

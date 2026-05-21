@@ -136,6 +136,6 @@ public class Bird {
     // Suma un punto al jugador.
     // Se llama cuando el pájaro pasa una tubería.
     public void addScore() {
-        score++;
+        score +=2;
     }
 }
